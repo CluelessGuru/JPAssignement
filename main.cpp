@@ -51,7 +51,8 @@ class RawData : public vector<Entry>{
 	weight += c.weight();
         count  += c.count();
       }
-      m_weight = weight/count;
+      m_weight = weight;
+      if (count) m_weight /= count;
       return m_weight;
     }
   private:
@@ -403,11 +404,11 @@ class Parameters{
       //cout << "Group " << i+1 << endl << "-----------" << endl;
       vector<bool> javail(nentries, true);
       Group group1(group_count);
-      group1.create(group_count, ientry, jentry, javail); 
+      if (!group1.create(group_count, ientry, jentry, javail)) continue; 
       group1.updateStrengthCount(data, jentry);
 
       Group group2(group_count);
-      group2.create(group_count, ientry, jentry, javail); 
+      if (!group2.create(group_count, ientry, jentry, javail)) continue; 
       group2.updateStrengthCount(data, jentry);
 
       //group1.Print(data, jentry);
@@ -424,6 +425,7 @@ class Parameters{
       //  group1.Print(data, jentry);
       //  group2.Print(data, jentry);
       //}
+
       if (i == 0 || abs(group1_best.Strength() - group2_best.Strength()) > abs(group1.Strength() - group2.Strength())){
 	group1_best = group1;
 	group2_best = group2;
@@ -431,7 +433,6 @@ class Parameters{
     }
     //group1_best.Print(data, jentry);
     //group2_best.Print(data, jentry);
-    
     RawData data1, data2;
     for (int i = 0; i < group1_best.Size(); ++i){
       int j = jentry[group1_best[i]];
