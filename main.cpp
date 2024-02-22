@@ -1,3 +1,11 @@
+//Notes:
+//1) Idea is simple. First create two groups and then try to optimize them
+//   by swapping entries in the group with available entries
+//2) Due to time constraints swapping between groups was not implemented,
+//   therefore the algorithm works better with high number of available elements
+//   and when the count of each entry is less than the target count for the group.
+//3) Works with any target group size (not only 5).
+
 #include <iostream>
 #include <string>
 #include <cassert>
@@ -81,10 +89,19 @@ class Group : public vector<int>{
       }
       return std::make_pair(m_strength, m_count);
     }
-    bool create(int cnt, const vector<int>& ientry, const vector<int>& jentry, vector<bool>& javail){
-      if (cnt == 0) {
-	return true;
-      }
+    bool create(int cnt, const vector<int>& ientry, const vector<int>& jentry, vector<bool>& javail, 
+	        int& search_time){
+      if (cnt == 0) return true;
+      auto start = high_resolution_clock::now();
+
+      auto timeout = [&](){
+        auto stop = high_resolution_clock::now();
+        int elapsed = duration_cast<seconds>(stop - start).count();
+	search_time -= elapsed;
+	start = stop;
+        if (search_time < 0) return true;
+	return false;
+      };
       
       int ist = -1;
       for (int i = ientry[cnt-1]; i < ientry[cnt]; ++i){
@@ -98,6 +115,7 @@ class Group : public vector<int>{
             return true;
           }
         }
+	if (timeout()) return false;
       }
       if (ist > -1){ //pick first one if last was not available
 	 //cout << __LINE__ << " Off " << ist << endl;
@@ -109,9 +127,10 @@ class Group : public vector<int>{
       int n0 = cnt/2+cnt%2;
       int prev_size = m_size;
       for (int i = cnt-1; i >= n0; --i){
-        if (create(i, ientry, jentry, javail))
-          if (create(cnt-i, ientry, jentry, javail)) 
+        if (create(i, ientry, jentry, javail, search_time))
+          if (create(cnt-i, ientry, jentry, javail, search_time)) 
             return true;
+	if (timeout()) return false;
         for (int j = prev_size; j < m_size; ++j) {
 	  //cout << __LINE__ << " On " << (*this)[j] << endl;
 	  javail[(*this)[j]] = true;
@@ -404,11 +423,13 @@ class Parameters{
       //cout << "Group " << i+1 << endl << "-----------" << endl;
       vector<bool> javail(nentries, true);
       Group group1(group_count);
-      if (!group1.create(group_count, ientry, jentry, javail)) continue; 
+      int max_time = search_time;
+      if (!group1.create(group_count, ientry, jentry, javail, max_time)) continue; 
       group1.updateStrengthCount(data, jentry);
 
       Group group2(group_count);
-      if (!group2.create(group_count, ientry, jentry, javail)) continue; 
+      max_time = search_time;
+      if (!group2.create(group_count, ientry, jentry, javail, max_time)) continue; 
       group2.updateStrengthCount(data, jentry);
 
       //group1.Print(data, jentry);
@@ -457,6 +478,7 @@ int main(int nargs, char**argv )
     unsigned int max_trys  = 10;
     unsigned int ecount    = -1;
     unsigned int ewgt      = 100;
+    unsigned int popsz     = 200;
 
     for (int i = 1; i < nargs; ++i){
       char* eq = strchr(argv[i], '='); 
@@ -470,6 +492,7 @@ int main(int nargs, char**argv )
         else if (strcmp(argv[i], "-ntrys")  == 0)  max_trys    = atoi(eq+1); 
         else if (strcmp(argv[i], "-ecount") == 0)  ecount      = atoi(eq+1); 
         else if (strcmp(argv[i], "-ewght")  == 0)  ewgt        = atoi(eq+1); 
+        else if (strcmp(argv[i], "-popsz")  == 0)  popsz       = atoi(eq+1); 
       }
     }
     //initialize random number generation for entry picking
@@ -481,7 +504,7 @@ int main(int nargs, char**argv )
 
     cout << argv[0] << " -seed=" << seed << " -thresh=" << thresh << " -gcount=" << group_count
          << " -time=" << search_time << " -noper=" << max_oper << " -ntrys=" << max_trys 
-	 << " -ecount=" << ecount << " -ewght=" << ewgt 
+	 << " -ecount=" << ecount << " -ewght=" << ewgt << " -popsz=" << popsz
 	 << endl;
     Parameters param{seed, thresh, group_count, search_time, max_oper, max_trys};
  
@@ -494,16 +517,16 @@ int main(int nargs, char**argv )
     data.push_back(Entry{"F", 1, 220});
     data.push_back(Entry{"G", 3, 195}); **/
     char name[4];
-    for (int i = 0; i < 20; ++i){
+    for (int i = 0; i < popsz; ++i){
       for (int j = 0; j < 4; ++j) name[j] = rand()%26 + 97;
       int cnt = rand()%ecount+1;
       int wgt = rand()%ewgt+1;
       data.push_back(Entry{name, cnt, wgt});
     }
-    std::pair<RawData, RawData> groups = generateTwoSimilarGroups(data, param);
-    
     cout << "RawData" << endl << "----------" << endl;
     for (auto c : data) c.print(); cout << endl;
+    std::pair<RawData, RawData> groups = generateTwoSimilarGroups(data, param);
+    
 
     cout << "Group1: " << groups.first.Weight() << endl << "----------" << endl;
     for (auto c : groups.first) c.print(); cout << endl;
